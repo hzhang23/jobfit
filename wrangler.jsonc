@@ -26,6 +26,11 @@
     }
   ],
   "ai": { "binding": "AI" },
+  "assets": {
+    "directory": "./web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
   "vars": {
     // Both roles use the same model. The two-model split existed to spend less
     // on the call that runs ten times per run than on the call that runs four.

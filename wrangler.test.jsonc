@@ -55,9 +55,16 @@
   // Nothing here loses coverage. Every test that triggers a run replaces
   // JOB_RUN with a fake Workflow on the env passed to app.fetch (see
   // test/api/routes.test.ts), so the real binding is never exercised. This is
-  // the one field, besides "ai", where the two configs are allowed to differ,
-  // and it is allowed for a reason that has nothing to do with the AI binding.
+  // one of three fields, alongside "ai" and "assets", where the two configs
+  // are allowed to differ, and each is allowed for a reason of its own.
   "triggers": { "crons": ["0 * * * *"] },
+  // "assets" is deliberately absent here too, unlike in wrangler.jsonc. Its
+  // directory is "./web/dist", which is a gitignored build artifact: it only
+  // exists once someone has run "npm run build:web". A test config that named
+  // it would abort the runtime on any clone that has not run the frontend
+  // build yet, before a single test runs. test/api/index.test.ts already
+  // covers the no-assets path deliberately, and Env.ASSETS is optional on the
+  // Env type precisely so this is a supported runtime state, not a crash.
   "d1_databases": [
     {
       "binding": "DB",
