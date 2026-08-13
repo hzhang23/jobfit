@@ -139,6 +139,42 @@ describe('runPipeline', () => {
     expect(dropped[0]!.outcome_detail).toContain('400 character floor');
   });
 
+  // Regression test. The degraded verdict used to count only postings that
+  // failed the screening gate, so a feed that returned mostly rows the adapter
+  // could not parse reported itself healthy. `fetched` counts postings that
+  // parsed, so those rows were invisible to every number on the receipt. That
+  // is the original incident in different clothes.
+  it('marks the run degraded when most of what came back could not be parsed', async () => {
+    const { ai } = aiStub([88, 88]);
+    const source = fakeSource({
+      postings: [posting(1, REAL_DESCRIPTION), posting(2, REAL_DESCRIPTION)],
+      unparseable: 9,
+    });
+
+    await runPipeline(await deps(source, ai), { userId: USER, trigger: 'schedule', runId });
+
+    const receipt = await repo.getRunReceipt(env.DB, runId);
+    expect(receipt).toMatchObject({ fetched: 2, unparseable: 9, scored: 2, passed: 2 });
+
+    // 9 unreadable out of 11 candidates is over the ratio, even though both
+    // postings that did parse were scored and both passed.
+    const runRow = await repo.getRun(env.DB, runId);
+    expect(runRow!.status).toBe('degraded');
+  });
+
+  it('leaves a run succeeded when only a few rows could not be parsed', async () => {
+    const { ai } = aiStub([88, 88, 88, 88]);
+    const source = fakeSource({
+      postings: [1, 2, 3, 4].map((i) => posting(i, REAL_DESCRIPTION)),
+      unparseable: 1,
+    });
+
+    await runPipeline(await deps(source, ai), { userId: USER, trigger: 'schedule', runId });
+
+    expect((await repo.getRun(env.DB, runId))!.status).toBe('succeeded');
+    expect(await repo.getRunReceipt(env.DB, runId)).toMatchObject({ unparseable: 1, passed: 4 });
+  });
+
   it('records score_failed for one posting without killing the run', async () => {
     let call = 0;
     // The first scoring call rejects the way a real provider rejects: quota,

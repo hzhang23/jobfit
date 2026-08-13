@@ -26,6 +26,26 @@ export function MatchDetail({ id, onBack }: { id: string; onBack: () => void }) 
 
   if (!match) return <main>Loading</main>;
 
+  return <MatchDetailView id={id} match={match} tailored={tailored} onBack={onBack} />;
+}
+
+/**
+ * The presentational body of the match detail page, extracted from
+ * `MatchDetail` so it can be rendered directly in tests without going through
+ * the `useEffect` data fetch. `MatchDetail` is the only caller in the app;
+ * tests import this component to exercise the same markup the app ships.
+ */
+export function MatchDetailView({
+  id,
+  match,
+  tailored,
+  onBack,
+}: {
+  id: string;
+  match: Detail;
+  tailored: TailoredResume | null;
+  onBack: () => void;
+}) {
   return (
     <main>
       <button onClick={onBack}>Back</button>
@@ -41,9 +61,22 @@ export function MatchDetail({ id, onBack }: { id: string; onBack: () => void }) 
         {match.location}
       </p>
 
+      {/*
+        Two outcomes carry a null score, and neither may render as a number or
+        as a blank. A posting that never reached the model and a posting the
+        model could not score are different facts, and both are different from
+        a score of zero. outcome_detail already holds the reason in each case,
+        computed by the pipeline. Throwing it away here would undo the whole
+        point of recording it.
+      */}
       {match.outcome === 'insufficient_input' ? (
         <p>
           <strong>Not evaluated.</strong> {match.outcome_detail}
+        </p>
+      ) : match.outcome === 'score_failed' ? (
+        <p>
+          <strong>No score.</strong> This posting reached the scorer and came back without a
+          judgment. {match.outcome_detail}
         </p>
       ) : (
         <>
@@ -62,6 +95,23 @@ export function MatchDetail({ id, onBack }: { id: string; onBack: () => void }) 
             Was this judgment right?{' '}
             <button onClick={() => api.setFeedback(id, true)}>Yes</button>{' '}
             <button onClick={() => api.setFeedback(id, false)}>No</button>
+          </p>
+        </>
+      )}
+
+      {/*
+        A passed match with no tailored resume must say why. The pipeline
+        records the reason on outcome_detail, distinguishing "the writer
+        failed" from "the per-run cap refused it". Rendering nothing at all
+        makes those two look identical to each other and to a match that was
+        never attempted, which is the same defect as a dashboard that renders
+        a bare empty state.
+      */}
+      {!tailored && match.outcome === 'passed' && (
+        <>
+          <p className="section-label">Tailored resume</p>
+          <p style={{ color: 'var(--warn)' }}>
+            {match.outcome_detail ?? 'No tailored resume was written for this match.'}
           </p>
         </>
       )}

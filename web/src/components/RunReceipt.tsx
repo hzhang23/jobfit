@@ -16,13 +16,16 @@ export function RunReceipt({ run }: { run: Run }) {
       {degraded && (
         <p>
           <strong>Today's results are not trustworthy.</strong>{' '}
-          {r.insufficient + r.scoreFailed} of {r.insufficient + r.scored + r.scoreFailed}{' '}
-          postings produced no judgment at all
-          {r.insufficient > 0 && r.scoreFailed > 0
-            ? ', some without a usable description and some because the scorer failed'
-            : r.insufficient > 0
-              ? ', because they arrived without a usable description'
-              : ', because the scorer failed on them'}
+          {r.insufficient + r.scoreFailed + r.unparseable} of{' '}
+          {r.insufficient + r.scored + r.scoreFailed + r.unparseable} postings produced no
+          judgment at all.{' '}
+          {[
+            r.unparseable > 0 ? `${r.unparseable} could not be read at all` : null,
+            r.insufficient > 0 ? `${r.insufficient} arrived without a usable description` : null,
+            r.scoreFailed > 0 ? `${r.scoreFailed} could not be scored` : null,
+          ]
+            .filter(Boolean)
+            .join(', ')}
           .
         </p>
       )}
@@ -35,8 +38,9 @@ export function RunReceipt({ run }: { run: Run }) {
 
       <p>
         <code>
-          {r.fetched} fetched, {r.alreadySeen} already seen, {r.insufficient} no description,{' '}
-          {r.scored} scored, {r.passed} passed
+          {r.fetched} fetched
+          {r.unparseable > 0 ? `, ${r.unparseable} unreadable` : ''}, {r.alreadySeen} already
+          seen, {r.insufficient} no description, {r.scored} scored, {r.passed} passed
           {r.scoreFailed > 0 ? `, ${r.scoreFailed} could not be scored` : ''}
         </code>
       </p>
@@ -52,6 +56,11 @@ export function RunReceipt({ run }: { run: Run }) {
             <>
               {r.scoreFailed} postings reached the scorer and none of them came back with a
               score. This is a scoring failure, not a quiet day.
+            </>
+          ) : r.fetched === 0 && r.unparseable > 0 ? (
+            <>
+              {r.unparseable} rows came back and none of them could be read. The source has
+              probably changed shape. This is not a quiet day.
             </>
           ) : r.fetched === 0 ? (
             <>Nothing came back from the job source. This is a fetch problem, not a quiet day.</>

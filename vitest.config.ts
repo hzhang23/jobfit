@@ -11,6 +11,11 @@ export default defineWorkersConfig(async () => {
 
   return {
     test: {
+      // test/web is the React render suite. It runs under plain node via
+      // vitest.web.config.ts. Without this exclusion those files are collected
+      // here as well and run twice, once inside a Workers runtime that has no
+      // reason to be booted for a string comparison on rendered HTML.
+      exclude: ['**/node_modules/**', '**/dist/**', 'test/web/**'],
       setupFiles: ['./test/apply-migrations.ts'],
       poolOptions: {
         workers: {

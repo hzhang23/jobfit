@@ -15,7 +15,7 @@ export function Dashboard({ onOpen }: { onOpen: (id: string) => void }) {
     setPassed(await api.listMatches('?outcome=passed'));
     // Deliberate: a sample of the negative class is always on screen, because
     // a drifting scorer hides in what nobody inspects.
-    setRejectedSample((await api.listMatches('?outcome=rejected&limit=2')).slice(0, 2));
+    setRejectedSample(await api.listMatches('?outcome=rejected&limit=2'));
   }
 
   useEffect(() => {

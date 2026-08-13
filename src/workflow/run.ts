@@ -81,7 +81,11 @@ export async function runPipeline(deps: PipelineDeps, params: JobRunParams): Pro
         newJobs: inserted.length,
         unparseable: result.unparseable,
       });
-      return { newJobIds: inserted.map((j) => j.id) };
+      // unparseable travels out of the step because the degraded verdict needs
+      // it. A feed that returns 18 unreadable rows out of 20 is the loudest
+      // possible signal that the source changed shape, and it must not be
+      // possible for that run to report itself healthy.
+      return { newJobIds: inserted.map((j) => j.id), unparseable: result.unparseable };
     });
 
     // The deterministic gate. Everything it rejects gets a visible row and
@@ -277,11 +281,18 @@ export async function runPipeline(deps: PipelineDeps, params: JobRunParams): Pro
     }
 
     await step('finalize', async () => {
-      // Both causes count. A run where every description was empty and a run
-      // where every scoring call failed are equally untrustworthy, and a run
-      // that reports "succeeded" after producing no judgment at all is exactly
-      // the silence this project exists to remove.
-      const degraded = isDegraded(screened.total, screened.insufficient + scoreFailed);
+      // Three causes count, not one. A run where every description was empty,
+      // a run where every scoring call failed, and a run where the adapter
+      // could not parse most of what came back are equally untrustworthy. A
+      // run that reports "succeeded" after producing no judgment at all is
+      // exactly the silence this project exists to remove.
+      //
+      // Already-seen postings are not in either figure. They were judged in an
+      // earlier run, so this run owes no verdict on them. Unparseable rows are
+      // in both, because they were candidates for judgment and produced none.
+      const judgeable = screened.total + fetched.unparseable;
+      const unjudged = screened.insufficient + scoreFailed + fetched.unparseable;
+      const degraded = isDegraded(judgeable, unjudged);
       await repo.finishRun(db, runId, degraded ? 'degraded' : 'succeeded', null);
     });
   } catch (error) {
