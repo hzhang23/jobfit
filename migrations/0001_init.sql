@@ -94,7 +94,6 @@ CREATE TABLE usage_ledger (
   purpose    TEXT NOT NULL,
   tokens_in  INTEGER NOT NULL,
   tokens_out INTEGER NOT NULL,
-  cost_usd   REAL NOT NULL,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX idx_usage_created ON usage_ledger(user_id, created_at DESC);

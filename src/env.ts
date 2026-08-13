@@ -5,5 +5,4 @@ export interface Env {
   OPENAI_API_KEY: string;
   SCORING_MODEL: string;
   TAILORING_MODEL: string;
-  MONTHLY_COST_CEILING_USD: string;
 }
