@@ -4,6 +4,7 @@ import * as repo from '../../db/repo';
 import { type ProvenanceReport, verifiedOnly } from '../../domain/provenance';
 import type { AppStatus, MatchOutcome } from '../../domain/types';
 import type { Env } from '../../env';
+import { BAD_JSON, readJson } from '../app';
 
 export const matches = new Hono<{ Bindings: Env }>();
 
@@ -45,7 +46,9 @@ matches.post('/matches/:id/status', async (c) => {
   const match = await repo.getMatch(c.env.DB, c.req.param('id'));
   if (!match || match.user_id !== userId) return c.json({ error: 'No such match' }, 404);
 
-  const { status } = await c.req.json<{ status?: string }>();
+  const body = await readJson<{ status?: string }>(c);
+  if (!body) return c.json(BAD_JSON, 400);
+  const { status } = body;
   if (!STATUSES.includes(status as AppStatus)) {
     return c.json({ error: `status must be one of ${STATUSES.join(', ')}` }, 400);
   }
@@ -58,7 +61,9 @@ matches.post('/matches/:id/feedback', async (c) => {
   const match = await repo.getMatch(c.env.DB, c.req.param('id'));
   if (!match || match.user_id !== userId) return c.json({ error: 'No such match' }, 404);
 
-  const { agrees } = await c.req.json<{ agrees?: unknown }>();
+  const body = await readJson<{ agrees?: unknown }>(c);
+  if (!body) return c.json(BAD_JSON, 400);
+  const { agrees } = body;
   if (typeof agrees !== 'boolean') {
     return c.json({ error: 'agrees must be a boolean' }, 400);
   }

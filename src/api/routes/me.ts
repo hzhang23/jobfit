@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { getCurrentUser } from '../../auth';
 import * as repo from '../../db/repo';
 import type { Env } from '../../env';
+import { BAD_JSON, readJson } from '../app';
 
 export const me = new Hono<{ Bindings: Env }>();
 
@@ -22,7 +23,8 @@ me.get('/me', async (c) => {
 });
 
 me.put('/resume', async (c) => {
-  const body = await c.req.json<{ content?: unknown }>();
+  const body = await readJson<{ content?: unknown }>(c);
+  if (!body) return c.json(BAD_JSON, 400);
   const content = typeof body.content === 'string' ? body.content : '';
   if (!content.trim()) {
     return c.json({ error: 'Resume content cannot be empty' }, 400);
@@ -33,7 +35,8 @@ me.put('/resume', async (c) => {
 });
 
 me.put('/prefs', async (c) => {
-  const body = await c.req.json<Record<string, unknown>>();
+  const body = await readJson<Record<string, unknown>>(c);
+  if (!body) return c.json(BAD_JSON, 400);
   const patch: repo.PrefsPatch = {};
 
   if (typeof body.keywords === 'string') patch.keywords = body.keywords.trim();

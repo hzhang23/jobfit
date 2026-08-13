@@ -12,6 +12,16 @@ export default {
     if (url.pathname.startsWith('/api/')) {
       return app.fetch(request, env, ctx);
     }
+    // The assets binding only exists once Task 10 has built the frontend and
+    // declared it. Guard rather than dereference. Deploying without running
+    // the frontend build is an easy mistake, and this turns a bare TypeError
+    // with no explanation into a two second diagnosis.
+    if (!env.ASSETS) {
+      return new Response(
+        'The web interface is not available. Run "npm run build:web", and make sure wrangler.jsonc declares an assets directory.',
+        { status: 503, headers: { 'content-type': 'text/plain' } },
+      );
+    }
     return env.ASSETS.fetch(request);
   },
 
