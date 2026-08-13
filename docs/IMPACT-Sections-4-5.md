@@ -32,7 +32,9 @@ These are product failure modes, stated as what the user experiences.
 | **4. Stale postings** | Posting date is captured at fetch time and displayed. Anything older than 21 days is labeled "may already be filled" and drops out of the default dashboard view. It is hidden by a filter rather than deleted, so if the rule turns out to be wrong no data was lost while it was in effect. |
 | **5. Automation bias** | A calibration loop. Each match carries an agree/disagree control, and the settings page reports the disagreement rate: "of your last 20 reviewed decisions you disagreed with 6, your threshold may need adjusting." Separately, **the dashboard always surfaces 2 rejected postings beneath the accepted ones**, labeled "we said no to these." A drifting scorer hides in the negative class because nobody inspects what was rejected, so a sample of rejections is forced into view. |
 
-Three of these five are implemented in the v1 build: the pre-model screening gate, the provenance validator, and the run receipt. Responses 4 and 5 are specified and scoped but may land after v1.
+**Four of these five are implemented in the v1 build**, verified against the running app: the pre-model screening gate, the provenance validator, the run receipt, and the calibration loop. The calibration loop ships complete, meaning the per match agree and disagree control, the disagreement rate on the settings page, and the two rejected postings forced onto the dashboard under the heading "we said no to these".
+
+**Response 4, the staleness window, is the one that did not land.** Posting date is captured at fetch time and carried all the way to the interface, so the data is there, but nothing yet labels a posting older than 21 days or filters it out of the default view. It is the cheapest of the five to add and the least dangerous to omit, which is exactly why it lost. Naming it here rather than quietly implying five of five is the point of the exercise.
 
 ### A note on response 1
 
