@@ -1,10 +1,13 @@
+<!--
+  GENERATED FILE. Do not edit.
+  Source: docs/IMPACT-Living-Document.md, Section 4.
+  Regenerate: npm run build:submission
+-->
+
 > Section 4 of the IMPACT Living Document, submitted separately because the
 > assignment asks for it separately. The full document, including how the
 > reasoning here revised Sections 1 and 2, is at
 > [docs/IMPACT-Living-Document.md](../docs/IMPACT-Living-Document.md).
->
-> Generated from that document by `npm run build:submission`. Edit the living
-> document, not this file.
 
 # Section 4: Accuracy and Safety
 

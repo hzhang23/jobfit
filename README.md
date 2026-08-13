@@ -98,6 +98,8 @@ The three items this build was submitted as, in `submission/`:
 
 Files 2 and 3 are generated from the living document by `npm run build:submission`, so edit the living document rather than the copies.
 
+PDF versions live in `submission/pdf/` after `npm run build:pdf`. They exist because Markdown is the wrong upload format here: the screenshots are relative links, so uploading a `.md` on its own delivers broken images, and the evidence that the tool actually runs is exactly what goes missing. The build inlines every image as a data URI, so each PDF is self contained.
+
 ## Design documents
 
 - [Design spec](docs/superpowers/specs/2026-08-12-jobfit-design.md) covers requirements, the data model, the API, and the deep dives on each defense.

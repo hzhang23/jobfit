@@ -8,3 +8,6 @@ dist/
 .DS_Store
 coverage/
 web/dist/
+
+# Generated PDFs. Rebuild with: npm run build:pdf
+submission/pdf/

@@ -32,25 +32,32 @@ function extractSection(n) {
     .trimEnd();
 }
 
-const PREAMBLE = (n, name) => `> Section ${n} of the IMPACT Living Document, submitted separately because the
+// The reader-facing note goes in the document itself. The "do not edit this
+// file" note is for whoever opens it in the repository, and would be noise at
+// the top of a submitted PDF, so it is an HTML comment: visible in the raw
+// file, invisible once rendered.
+const PREAMBLE = (n) => `<!--
+  GENERATED FILE. Do not edit.
+  Source: docs/IMPACT-Living-Document.md, Section ${n}.
+  Regenerate: npm run build:submission
+-->
+
+> Section ${n} of the IMPACT Living Document, submitted separately because the
 > assignment asks for it separately. The full document, including how the
 > reasoning here revised Sections 1 and 2, is at
 > [docs/IMPACT-Living-Document.md](../docs/IMPACT-Living-Document.md).
->
-> Generated from that document by \`npm run build:submission\`. Edit the living
-> document, not this file.
 
 `;
 
 mkdirSync(join(root, 'submission'), { recursive: true });
 
 const targets = [
-  [4, 'failure-mode-map', '2-failure-mode-map.md'],
-  [5, 'tradeoffs-table', '3-tradeoffs-table.md'],
+  [4, '2-failure-mode-map.md'],
+  [5, '3-tradeoffs-table.md'],
 ];
 
-for (const [n, name, file] of targets) {
-  const out = PREAMBLE(n, name) + extractSection(n) + '\n';
+for (const [n, file] of targets) {
+  const out = PREAMBLE(n) + extractSection(n) + '\n';
   if (out.includes('—')) {
     throw new Error(`Em dash found in ${file}. Fix it in the living document.`);
   }

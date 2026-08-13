@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply jobfit --local",
     "db:migrate:remote": "wrangler d1 migrations apply jobfit --remote",
-    "build:submission": "node scripts/build-submission.mjs"
+    "build:submission": "node scripts/build-submission.mjs",
+    "build:pdf": "bash scripts/build-pdf.sh"
   },
   "dependencies": {
     "hono": "^4.6.14"
