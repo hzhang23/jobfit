@@ -88,6 +88,16 @@ The cron fires hourly and only runs users whose chosen hour matches, so one sche
 
 There is no spend ceiling and no cost estimate, on purpose. An earlier version kept a local price table and compared an estimate against a monthly limit. A local price table is a copy of someone else's billing that goes stale without announcing it, and gating real behaviour on that estimate is the same shape as the failure this whole build exists to prevent. Cloudflare meters spend and refuses the call when the account is over quota. What is enforced locally is an exact cap on model calls per run.
 
+## Submission
+
+The three items this build was submitted as, in `submission/`:
+
+1. [The tool](submission/1-tool.md), meaning this repository, how to run it, and screenshots of a real run.
+2. [Failure Mode Map](submission/2-failure-mode-map.md), Section 4.
+3. [Tradeoffs Table](submission/3-tradeoffs-table.md), Section 5.
+
+Files 2 and 3 are generated from the living document by `npm run build:submission`, so edit the living document rather than the copies.
+
 ## Design documents
 
 - [Design spec](docs/superpowers/specs/2026-08-12-jobfit-design.md) covers requirements, the data model, the API, and the deep dives on each defense.

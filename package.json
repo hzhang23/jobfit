@@ -2,7 +2,9 @@
   "name": "jobfit",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "wrangler dev",
     "build:web": "vite build --config web/vite.config.ts",
@@ -12,7 +14,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply jobfit --local",
-    "db:migrate:remote": "wrangler d1 migrations apply jobfit --remote"
+    "db:migrate:remote": "wrangler d1 migrations apply jobfit --remote",
+    "build:submission": "node scripts/build-submission.mjs"
   },
   "dependencies": {
     "hono": "^4.6.14"
