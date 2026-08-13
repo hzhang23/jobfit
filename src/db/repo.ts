@@ -78,6 +78,7 @@ export interface Receipt {
   alreadySeen: number;
   unparseable: number;
   insufficient: number;
+  /** Postings that came back with a real score. Excludes score_failed. */
   scored: number;
   passed: number;
   rejected: number;
@@ -305,7 +306,12 @@ export async function getRunReceipt(db: D1Database, runId: string): Promise<Rece
     alreadySeen: run.fetched_count - run.new_count,
     unparseable: run.unparseable_count,
     insufficient: count('insufficient_input'),
-    scored: count('passed') + count('rejected') + count('score_failed'),
+    // Postings that actually have a score. A score_failed posting reached the
+    // model and came back with nothing, so counting it here would let the
+    // dashboard print "3 scored, 0 passed, 3 could not be scored", which is
+    // self-contradictory, and then explain a zero-pass day by citing a highest
+    // score that does not exist. It gets its own field instead.
+    scored: count('passed') + count('rejected'),
     passed: count('passed'),
     rejected: count('rejected'),
     scoreFailed: count('score_failed'),

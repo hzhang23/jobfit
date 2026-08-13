@@ -261,11 +261,11 @@ describe('runPipeline', () => {
     });
 
     const receipt = await repo.getRunReceipt(env.DB, runId);
-    // scored = passed + rejected + scoreFailed (see repo.ts getRunReceipt,
-    // and the existing "builds a receipt that distinguishes every outcome"
-    // test), so a run where every posting ends score_failed still reports
-    // scored: 3, not 0. Zero would mean the postings never reached scoring.
-    expect(receipt).toMatchObject({ scoreFailed: 3, scored: 3, passed: 0 });
+    // scored counts postings that came back with a real score, so a run where
+    // every scoring call failed reports scored: 0 and scoreFailed: 3. If those
+    // three counted as scored, the dashboard would claim it scored three
+    // postings while also saying none of them could be scored.
+    expect(receipt).toMatchObject({ scoreFailed: 3, scored: 0, passed: 0 });
     expect((await repo.getRun(env.DB, runId))!.status).toBe('degraded');
   });
 

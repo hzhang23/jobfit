@@ -120,12 +120,40 @@ describe('repo', () => {
       alreadySeen: 6,
       unparseable: 1,
       insufficient: 1,
-      scored: 3,
+      scored: 2,
       passed: 1,
       rejected: 1,
       scoreFailed: 1,
       topRejectedScore: 40,
     });
+  });
+
+  it('separates scored postings from score_failed ones in the receipt', async () => {
+    const jobs = await repo.insertNewJobs(env.DB, USER, 'jobicy', [
+      posting(1),
+      posting(2),
+      posting(3),
+      posting(4),
+    ]);
+    const outcomes = ['passed', 'rejected', 'score_failed', 'score_failed'] as const;
+    for (let i = 0; i < outcomes.length; i++) {
+      await repo.insertMatch(env.DB, {
+        userId: USER,
+        runId,
+        jobId: jobs[i]!.id,
+        outcome: outcomes[i]!,
+        outcomeDetail: null,
+        score: outcomes[i] === 'passed' ? 90 : outcomes[i] === 'rejected' ? 40 : null,
+        reason: null,
+        evidence: null,
+      });
+    }
+
+    await repo.setRunCounts(env.DB, runId, { fetched: 4, newJobs: 4, unparseable: 0 });
+    const receipt = await repo.getRunReceipt(env.DB, runId);
+
+    expect(receipt).toMatchObject({ scored: 2, scoreFailed: 2, insufficient: 0 });
+    expect(receipt.scored + receipt.scoreFailed).toBe(4);
   });
 
   it('saves a tailored resume with its provenance report', async () => {
