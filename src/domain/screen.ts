@@ -16,17 +16,34 @@ const PLACEHOLDER_PATTERNS: RegExp[] = [
   /apply on the company site to learn more/i,
 ];
 
-export function stripHtml(input: string): string {
-  return input
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]*>/g, ' ')
+/** Matches a script or style block, including one the feed truncated mid-body. */
+const SCRIPT_OR_STYLE = /<(script|style)\b[\s\S]*?(?:<\/\1\s*>|$)/gi;
+
+/** Requires a closing bracket, so prose like "latency < 100ms" survives. */
+const ANY_TAG = /<[^>]*>/g;
+
+function removeMarkup(text: string): string {
+  return text.replace(SCRIPT_OR_STYLE, ' ').replace(ANY_TAG, ' ');
+}
+
+function decodeEntities(text: string): string {
+  return text
     .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/g, "'")
+    // Ampersand decodes last. Doing it first would turn &amp;lt; into &lt; in
+    // time for the &lt; rule to decode it again, producing a real tag out of
+    // text that was deliberately escaped.
+    .replace(/&amp;/gi, '&');
+}
+
+export function stripHtml(input: string): string {
+  // Strip, decode, strip again. The second strip is the one that matters:
+  // an encoded tag such as &lt;script&gt; carries no literal bracket, so it
+  // survives the first pass untouched and only becomes markup after decoding.
+  return removeMarkup(decodeEntities(removeMarkup(input)))
     .replace(/\s+/g, ' ')
     .trim();
 }

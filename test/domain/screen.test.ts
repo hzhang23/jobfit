@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MIN_DESCRIPTION_CHARS,
+  MIN_UNIQUE_TOKENS,
   isDegraded,
   screenPosting,
   stripHtml,
@@ -30,7 +31,29 @@ describe('stripHtml', () => {
   });
 
   it('decodes the entities that show up in job feeds', () => {
-    expect(stripHtml('R&amp;D&nbsp;team &lt;now&gt;')).toBe('R&D team <now>');
+    expect(stripHtml('R&amp;D&nbsp;team')).toBe('R&D team');
+  });
+
+  // Decoding can turn text into markup, so stripping has to happen again
+  // afterwards. Without a second pass an encoded tag reappears in the output.
+  it('does not let encoded markup reappear after decoding', () => {
+    expect(stripHtml('&lt;script&gt;alert(1)&lt;/script&gt;')).toBe('');
+    expect(stripHtml('Before &lt;b&gt;bold&lt;/b&gt; after')).toBe('Before bold after');
+  });
+
+  // &amp;lt; means the literal text &lt;, not a less-than sign. Decoding &amp;
+  // last is what keeps that from being decoded twice into a real tag.
+  it('does not double decode an escaped ampersand', () => {
+    expect(stripHtml('Use &amp;lt;b&amp;gt; to bold')).toBe('Use &lt;b&gt; to bold');
+  });
+
+  // Truncated feed HTML is exactly the malformed input this module guards against.
+  it('removes an unclosed script body', () => {
+    expect(stripHtml('Real content <script>alert(1)')).toBe('Real content');
+  });
+
+  it('leaves a bare less-than sign in prose alone', () => {
+    expect(stripHtml('latency < 100ms')).toBe('latency < 100ms');
   });
 });
 
@@ -74,14 +97,26 @@ describe('screenPosting', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('rejects at 399 characters and accepts at 400', () => {
-    const filler = (n: number) => 'x'.repeat(n);
-    expect(screenPosting({ ...base, description: filler(MIN_DESCRIPTION_CHARS - 1) }).ok).toBe(false);
+  it('rejects one character below the floor', () => {
+    const result = screenPosting({ ...base, description: 'x'.repeat(MIN_DESCRIPTION_CHARS - 1) });
+    expect(result).toMatchObject({ ok: false, detail: expect.stringContaining('399 characters') });
+  });
 
-    // 400 chars of a single repeated token still fails the unique word floor,
-    // which is the second rule doing its job.
-    const long = screenPosting({ ...base, description: filler(MIN_DESCRIPTION_CHARS) });
-    expect(long).toMatchObject({ ok: false, detail: expect.stringContaining('unique words') });
+  // The true positive at the boundary. Without this the suite could pass while
+  // screenPosting rejected everything, since every other case here is a
+  // rejection or uses a description far longer than the floor.
+  it('accepts a description at exactly the character floor', () => {
+    const distinct = Array.from({ length: 45 }, (_, i) => `word${i}`).join(' ');
+    const padded = `${distinct} ${'x'.repeat(MIN_DESCRIPTION_CHARS - distinct.length - 1)}`;
+
+    expect(padded).toHaveLength(MIN_DESCRIPTION_CHARS);
+    expect(uniqueTokenCount(padded)).toBeGreaterThanOrEqual(MIN_UNIQUE_TOKENS);
+    expect(screenPosting({ ...base, description: padded })).toEqual({ ok: true });
+  });
+
+  it('rejects a long description made of one repeated word', () => {
+    const result = screenPosting({ ...base, description: 'x'.repeat(MIN_DESCRIPTION_CHARS) });
+    expect(result).toMatchObject({ ok: false, detail: expect.stringContaining('unique words') });
   });
 
   it('rejects placeholder text even when it is long enough', () => {
