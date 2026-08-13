@@ -91,5 +91,5 @@ There is no spend ceiling and no cost estimate, on purpose. An earlier version k
 ## Design documents
 
 - [Design spec](docs/superpowers/specs/2026-08-12-jobfit-design.md) covers requirements, the data model, the API, and the deep dives on each defense.
-- [Failure Mode Map and Tradeoffs Table](docs/IMPACT-Sections-4-5.md) is Sections 4 and 5 of the IMPACT document.
+- [IMPACT Living Document](docs/IMPACT-Living-Document.md) is all five sections in one place, Intent through Cost and Constraints. The [Failure Mode Map](docs/IMPACT-Living-Document.md#section-4-accuracy-and-safety) is Section 4 and the [Tradeoffs Table](docs/IMPACT-Living-Document.md#section-5-cost-and-constraints) is Section 5.
 - [Implementation plan](docs/superpowers/plans/2026-08-12-jobfit-v1.md) is the task by task plan the build followed.

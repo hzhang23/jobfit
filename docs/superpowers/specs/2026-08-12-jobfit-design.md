@@ -226,7 +226,7 @@ No realtime progress push. A manual trigger returns 202 and the client polls `/a
 
 ## 5. Deep dives
 
-Each deep dive addresses one product failure mode or one non-functional requirement. The full failure mode map and tradeoffs table live in `docs/IMPACT-Sections-4-5.md`.
+Each deep dive addresses one product failure mode or one non-functional requirement. The full failure mode map and tradeoffs table live in `docs/IMPACT-Living-Document.md`.
 
 ### 5.1 The pre-model input gate
 
