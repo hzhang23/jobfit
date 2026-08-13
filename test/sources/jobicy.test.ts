@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { JobicySource } from '../../src/sources/jobicy';
+import { BOUND_FETCH, JobicySource } from '../../src/sources/jobicy';
 import good from '../fixtures/jobicy-good.json';
 import empty from '../fixtures/jobicy-empty.json';
 
@@ -75,5 +75,35 @@ describe('JobicySource', () => {
     await expect(
       new JobicySource(stubFetch({}, 503)).fetch(params),
     ).rejects.toThrow(/503/);
+  });
+});
+
+describe('the default fetch is bound', () => {
+  // Regression test for the first real run of this app, which failed before
+  // fetching a single posting with:
+  //
+  //   TypeError: Illegal invocation: function called with incorrect `this`
+  //   reference.
+  //
+  // The default was the bare global `fetch`. Called as `this.fetchImpl(...)`
+  // its receiver becomes the JobicySource instance, and workerd requires the
+  // global scope.
+  //
+  // This asserts the binding rather than the behaviour, on purpose. Behaviour
+  // cannot be asserted here: the test runtime's `fetch` is more permissive
+  // than workerd's and resolves happily when called detached, so a test that
+  // called it would pass with the bug present. That test was written first and
+  // thrown away for exactly that reason. These two assertions both fail the
+  // moment the `.bind` is removed.
+  it('is not the bare global fetch', () => {
+    expect(BOUND_FETCH).not.toBe(globalThis.fetch);
+  });
+
+  it('is a bound function', () => {
+    // workerd's global fetch has an empty `name`, so binding it produces the
+    // literal string "bound " with a trailing space rather than "bound fetch".
+    // Asserting the prefix keeps this true on a runtime that names it.
+    expect(BOUND_FETCH.name.startsWith('bound')).toBe(true);
+    expect(globalThis.fetch.name.startsWith('bound')).toBe(false);
   });
 });

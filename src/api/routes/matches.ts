@@ -35,8 +35,24 @@ matches.get('/matches/:id', async (c) => {
   const job = await repo.getJob(c.env.DB, match.job_id);
   return c.json({
     ...match,
+    // The display fields sit at the top level, the same place GET /matches
+    // puts them. The detail response used to nest all of them under `job`,
+    // so the page heading rendered as the bare word "at" with no title and no
+    // company, and the posting link pointed at undefined. Nothing caught it:
+    // the frontend type declared `Match & { job: { description } }`, which
+    // says these fields are here, and `req<T>` only casts the JSON rather
+    // than checking it, so the type asserted a shape the server never sent.
+    //
+    // Spread field by field rather than `...job`, because job.id would
+    // overwrite match.id and every link on the page would point at the wrong
+    // record.
+    title: job?.title ?? '',
+    company: job?.company ?? '',
+    location: job?.location ?? null,
+    url: job?.url ?? '',
+    posted_at: job?.posted_at ?? null,
     evidence: match.evidence ? JSON.parse(match.evidence) : [],
-    job,
+    job: { description: job?.description ?? '' },
     hasTailoredResume: Boolean(await repo.getTailoredResume(c.env.DB, match.id)),
   });
 });

@@ -24,7 +24,21 @@ export default defineWorkersConfig(async () => {
           // Not wrangler.jsonc. See the comment at the top of
           // wrangler.test.jsonc for why the AI binding cannot be declared here.
           wrangler: { configPath: './wrangler.test.jsonc' },
-          miniflare: { bindings: { TEST_MIGRATIONS: migrations } },
+          miniflare: {
+            bindings: { TEST_MIGRATIONS: migrations },
+            // "Tests never touch the network" was a convention, not a rule.
+            // The runtime happily allowed real outbound requests, and a test
+            // written during Task 11 hit the live Jobicy API without anyone
+            // noticing. Every real boundary in this project is injected, so a
+            // test that reaches the network has forgotten to inject something
+            // and is testing the internet instead of the code. Refuse it here
+            // so it fails loudly rather than passing slowly and flakily.
+            outboundService: (request) =>
+              new Response(
+                `Blocked outbound request to ${new URL(request.url).host}. Tests must inject a fetch stub or an AiRunner fake instead of reaching the network.`,
+                { status: 403 },
+              ),
+          },
         },
       },
     },

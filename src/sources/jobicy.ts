@@ -40,10 +40,29 @@ function parsePosting(row: unknown): RawPosting | null {
   };
 }
 
+/**
+ * The global `fetch`, bound to the global scope. The bind is load bearing.
+ *
+ * Stored on a property and called as `this.fetchImpl(...)`, an unbound `fetch`
+ * gets the JobicySource instance as its receiver. workerd requires the global
+ * scope and throws "Illegal invocation: function called with incorrect `this`
+ * reference". The first real run of this app failed exactly there, before
+ * fetching a single posting.
+ *
+ * No test caught it and no test could have. Every test injects a stub, and a
+ * plain function does not care what `this` is, so the default parameter was
+ * never executed. The test runtime's `fetch` is also more permissive than
+ * workerd's and does not reproduce the error even when called detached. The
+ * seam that keeps tests off the network is the same seam that hid the one line
+ * only production runs. `test/sources/jobicy.test.ts` asserts on this binding
+ * directly, since behaviour cannot be asserted here.
+ */
+export const BOUND_FETCH: typeof fetch = fetch.bind(globalThis);
+
 export class JobicySource implements JobSource {
   readonly name = 'jobicy';
 
-  constructor(private readonly fetchImpl: typeof fetch = fetch) {}
+  constructor(private readonly fetchImpl: typeof fetch = BOUND_FETCH) {}
 
   async fetch(params: FetchParams): Promise<FetchResult> {
     const url = new URL(ENDPOINT);

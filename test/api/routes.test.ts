@@ -129,6 +129,36 @@ describe('API', () => {
       expect(body.evidence).toHaveLength(1);
     });
 
+    // Regression test for the first real run. The detail response nested every
+    // display field under `job`, so the match page heading rendered as the bare
+    // word "at" with no title and no company, and the posting link pointed at
+    // undefined. The old test above passed throughout, because it only ever
+    // looked at `evidence`.
+    //
+    // The frontend type says `Match & { job: { description } }`, which puts
+    // these fields at the top level, and `req<T>` casts the JSON rather than
+    // checking it, so the type asserted a shape the server never sent. This
+    // test asserts the contract the page actually depends on, field by field.
+    it('returns detail with the display fields the match page reads', async () => {
+      const body = await (await call(`/api/matches/${matchId}`)).json<{
+        id: string;
+        title: string;
+        company: string;
+        location: string | null;
+        url: string;
+        job: { description: string };
+      }>();
+
+      expect(body.title).toBe('Backend Engineer');
+      expect(body.company).toBe('Acme');
+      expect(body.url).toMatch(/^https?:\/\//);
+      expect(body.job.description.length).toBeGreaterThan(0);
+      // The job row has its own id. Spreading the whole job over the match
+      // would silently replace the match id, and every link on the page would
+      // then point at the wrong record.
+      expect(body.id).toBe(matchId);
+    });
+
     it('returns the tailored resume with its provenance lines', async () => {
       const body = await (await call(`/api/matches/${matchId}/resume`)).json<{ unverifiedCount: number; lines: unknown[] }>();
       expect(body.unverifiedCount).toBe(1);
