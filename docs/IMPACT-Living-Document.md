@@ -312,7 +312,7 @@ I took that trade knowingly. **Without job descriptions, the entire AI half of t
 
 ## Section 4: Accuracy and Safety
 
-## A1. Top 5 failure modes
+### A1. Top 5 failure modes
 
 These are product failure modes, stated as what the user experiences.
 
@@ -324,7 +324,7 @@ These are product failure modes, stated as what the user experiences.
 | 4 | I put real effort into applying to a role that was filled two weeks ago |
 | 5 | By week two I stopped reading the reasons and applied to anything above 70. The tool trained me into clicking without looking, my application quality dropped, and I did not notice |
 
-## A2. Product-layer response to each failure
+### A2. Product-layer response to each failure
 
 | Failure mode | Product-layer response |
 |---|---|
@@ -338,7 +338,7 @@ These are product failure modes, stated as what the user experiences.
 
 **Response 4, the staleness window, is the one that did not land.** Posting date is captured at fetch time and carried all the way to the interface, so the data is there, but nothing yet labels a posting older than 21 days or filters it out of the default view. It is the cheapest of the five to add and the least dangerous to omit, which is exactly why it lost. Naming it here rather than quietly implying five of five is the point of the exercise.
 
-### A note on response 1
+#### A note on response 1
 
 There was a real choice in how to build the provenance validator, and the obvious option was rejected.
 
@@ -346,7 +346,7 @@ The obvious option is a second model call acting as a judge, asking whether each
 
 The cost of that choice is stated honestly rather than hidden. Deterministic extraction catches invented specifics, which is the dangerous class. It does not catch semantic drift that introduces no new tokens, such as rewriting "was on a team" into "led a team." That false negative is a known gap, has a dedicated test documenting it, and is accounted for in the eval plan below.
 
-## A3. Eval plan
+### A3. Eval plan
 
 **Primary metric: fabrication.**
 
@@ -360,7 +360,7 @@ The asymmetry between those two error types is deliberate. A false positive cost
 
 Below 0.60 the gate is not outperforming my own skim of the job titles, which means the feature is not earning its cost and should be cut rather than tuned.
 
-## A4. The uncomfortable question
+### A4. The uncomfortable question
 
 On Tuesday afternoon the job API changes its response shape and descriptions start coming back as empty strings. I find out on Friday.
 
@@ -372,7 +372,7 @@ Nobody is physically harmed and there is no headline, so the autonomy level does
 
 ## Section 5: Cost and Constraints
 
-## C1. Top 3 tradeoffs
+### C1. Top 3 tradeoffs
 
 **1. Coverage vs. accuracy. Decision: accuracy.**
 Postings without a substantial description are dropped before scoring, rather than scored with a disclaimer attached. The expected loss is 15% to 30% of everything fetched. I would rather be shown 4 matches I can defend than 10 I cannot.
@@ -383,7 +383,7 @@ Every generated resume now goes through an additional provenance pass, and the r
 **3. Autonomy vs. trust. Decision: trust.**
 The ceiling is drafts. The tool never sends, never applies, never emails. Lowering autonomy is the only thing that makes the A4 scenario survivable rather than unrecoverable.
 
-### A fourth tradeoff, decided after the first three
+#### A fourth tradeoff, decided after the first three
 
 **Model strength vs. not having to be right about cost. Decision: give up the stronger model.**
 
@@ -399,7 +399,7 @@ So the estimator was deleted rather than fixed, and the app moved to Cloudflare 
 
 **The cost I am still paying:** the provider tells you after you have spent, not before. There is no pre-flight cost check anymore. The call cap replaces it, and it is coarser, since it bounds the number of calls rather than their size. For a tool making at most 14 calls a day I will take that.
 
-## C2. Latency budget
+### C2. Latency budget
 
 | Surface | Budget | Why |
 |---|---|---|
@@ -410,7 +410,7 @@ So the estimator was deleted rather than fixed, and the app moved to Cloudflare 
 | Match detail and tailored resume | 1 s | This is reading, served from the database |
 | **Provenance highlights** | **Must paint in the same frame as the resume text** | If the markers arrive after the text, I read the unmarked version first and the validator has failed at its job. **This is a correctness requirement wearing a latency budget's clothing** |
 
-## C3. The 70/30 split
+### C3. The 70/30 split
 
 **70% validated:** Cloudflare Workers, D1, Hono, React with Vite, hand written SQL, Workers AI JSON mode for structured output, and the Jobicy public REST API. All boring, all documented, all things I can search for an answer about when they break.
 
@@ -418,7 +418,7 @@ So the estimator was deleted rather than fixed, and the app moved to Cloudflare 
 
 The reason 30% is acceptable here is that **both experimental pieces are contained**. If Workflows misbehaves, the run does not finish and it retries tomorrow. If the validator misbehaves, it over-flags and costs me a few extra seconds of reading. Neither one degrades into a wrong output reaching an employer, which is the only failure I actually care about.
 
-## C4. The cut list
+### C4. The cut list
 
 | Cut | Why I cut it |
 |---|---|
