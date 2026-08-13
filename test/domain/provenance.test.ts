@@ -100,6 +100,33 @@ describe('verifyProvenance', () => {
     const drifted = verifyProvenance(master, 'Led 4 junior engineers');
     expect(drifted.unverifiedCount).toBe(0);
   });
+
+  // Regression test for the word-boundary defect. Without the leading [A-Za-z]*,
+  // "v2.3" extracts as just "3", which then appears in the master and verifies.
+  it('flags a fabricated version number', () => {
+    const masterWithoutVersion = 'Led 3 major initiatives improving reliability';
+    const report = verifyProvenance(masterWithoutVersion, 'Shipped v2.3 of the internal deployment tool');
+    expect(report.lines[0]?.status).toBe('unverified');
+    expect(report.lines[0]?.unsupported).toContain('v2.3');
+  });
+
+  // Regression test for the colon-as-boundary defect. The colon makes "Python"
+  // the sentence opener in "Skills: Python, ...", so it is skipped by the
+  // proper-noun loop. This is the most common fabrication site on resumes.
+  it('flags a fabricated first skill in a colon list', () => {
+    const masterSkills = 'Skills: TypeScript, PostgreSQL, Kubernetes, React';
+    const report = verifyProvenance(masterSkills, 'Skills: Python, PostgreSQL, Kubernetes, React');
+    expect(report.lines[0]?.status).toBe('unverified');
+    expect(report.lines[0]?.unsupported).toContain('Python');
+  });
+
+  // Regression test confirming that glued numbers like p99 and version numbers
+  // like v14 still verify correctly when present in the master.
+  it('accepts a genuine glued number present in the master', () => {
+    const masterWithGluedNumber = 'Reduced p99 latency to 250ms';
+    const report = verifyProvenance(masterWithGluedNumber, 'Optimized queries reduced p99 and 250ms load time');
+    expect(report.unverifiedCount).toBe(0);
+  });
 });
 
 describe('verifiedOnly', () => {
