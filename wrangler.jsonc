@@ -4,8 +4,19 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "jobfit",
-  "compatibility_date": "2025-09-01",
+  "main": "src/index.ts",
+  // Pinned to what the test runtime actually honours. vitest-pool-workers 0.5.x
+  // bundles miniflare 3.20241230.0, which caps here and silently falls back,
+  // so a later date would mean tests and production run different runtimes.
+  // Nothing in this project needs 2025 semantics. Verified by probe: both
+  // WorkflowEntrypoint and NonRetryableError resolve at this date. Raise it
+  // together with the test toolchain, not ahead of it.
+  "compatibility_date": "2024-12-30",
   "compatibility_flags": ["nodejs_compat"],
+  "workflows": [
+    { "name": "job-run", "binding": "JOB_RUN", "class_name": "JobRunWorkflow" }
+  ],
+  "triggers": { "crons": ["0 * * * *"] },
   "d1_databases": [
     {
       "binding": "DB",

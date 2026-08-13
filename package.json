@@ -2,6 +2,7 @@
   "name": "jobfit",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=20" },
   "scripts": {
     "dev": "wrangler dev",
     "build:web": "vite build --config web/vite.config.ts",
