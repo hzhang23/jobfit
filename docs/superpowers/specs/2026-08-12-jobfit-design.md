@@ -99,7 +99,9 @@ users            -- one row in v1. Reserved so auth is an additive change
 resumes          -- master resume, versioned, partial unique index enforces one active
 search_prefs     -- keywords, geo, min_score, max_jobs_per_run, schedule_hour_utc, enabled
 jobs             -- UNIQUE(user_id, source, external_id)
-runs             -- trigger, status, started_at, finished_at, error, cost_usd
+runs             -- trigger, status, started_at, finished_at, error, cost_usd,
+                 -- plus fetched_count, new_count, unparseable_count, which the
+                 -- receipt needs because an already-seen posting makes no match row
 tailored_resumes -- content, provenance JSON, unverified_count, model, source_resume_id
 usage_ledger     -- one row per AI call: model, purpose, tokens_in, tokens_out, cost_usd
 ```
