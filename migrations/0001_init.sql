@@ -47,7 +47,6 @@ CREATE TABLE runs (
   started_at        INTEGER NOT NULL,
   finished_at       INTEGER,
   error             TEXT,
-  cost_usd          REAL NOT NULL DEFAULT 0,
   -- Receipt counters that cannot be derived from matches, because a posting
   -- that was already seen never produces a match row.
   fetched_count     INTEGER NOT NULL DEFAULT 0,

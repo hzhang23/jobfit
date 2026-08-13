@@ -1,0 +1,38 @@
+// Test-only Worker config. Keep in sync with wrangler.jsonc.
+//
+// It exists for exactly one reason: wrangler passes the Workers AI binding to
+// the local runtime as an external proxied worker, and the test runtime cannot
+// resolve that proxy. Declaring "ai" here aborts the runtime before a single
+// test runs, with:
+//
+//   wrapped binding module can't be resolved (internal modules only);
+//   moduleName = miniflare-internal:wrapped:__WRANGLER_EXTERNAL_AI_WORKER
+//
+// Omitting it is not a workaround for a version gap. A proxied AI binding
+// reaches the real Workers AI service over the network and needs account
+// credentials, so a test suite that declared it would need a Cloudflare login
+// to start. The tests inject an AiRunner fake instead, which is why nothing
+// here ever touches the binding.
+//
+// Every other field must match wrangler.jsonc. If a binding is added there and
+// forgotten here, the tests fail loudly with a missing binding, which is the
+// direction of drift that self-detects.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jobfit",
+  "compatibility_date": "2025-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "jobfit",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "SCORING_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "TAILORING_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+  },
+  "observability": { "enabled": true }
+}

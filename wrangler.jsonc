@@ -1,3 +1,6 @@
+// The real Worker config, used by wrangler dev and wrangler deploy.
+// Tests run against wrangler.test.jsonc, which is this file minus the AI
+// binding. Any change here that adds or edits a binding belongs there too.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "jobfit",
@@ -11,9 +14,15 @@
       "migrations_dir": "migrations"
     }
   ],
+  "ai": { "binding": "AI" },
   "vars": {
-    "SCORING_MODEL": "gpt-4o-mini",
-    "TAILORING_MODEL": "gpt-4o"
+    // Both roles use the same model. The two-model split existed to spend less
+    // on the call that runs ten times per run than on the call that runs four.
+    // Workers AI has no per-token price to arbitrage, and scoring is the
+    // judgment-heavy half, so it gets the stronger model rather than the
+    // cheaper one. The two vars stay separate so the roles can diverge later.
+    "SCORING_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "TAILORING_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
   },
   "observability": { "enabled": true }
 }

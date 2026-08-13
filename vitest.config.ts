@@ -16,7 +16,9 @@ export default defineWorkersConfig(async () => {
         workers: {
           singleWorker: true,
           isolatedStorage: true,
-          wrangler: { configPath: './wrangler.jsonc' },
+          // Not wrangler.jsonc. See the comment at the top of
+          // wrangler.test.jsonc for why the AI binding cannot be declared here.
+          wrangler: { configPath: './wrangler.test.jsonc' },
           miniflare: { bindings: { TEST_MIGRATIONS: migrations } },
         },
       },
