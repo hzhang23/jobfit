@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as repo from '../../src/db/repo';
 import { runPipeline, type StepRunner } from '../../src/workflow/run';
 import type { AiRunner } from '../../src/ai/client';
-import { MAX_SCORING_CALLS_PER_RUN } from '../../src/domain/quota';
+import { MAX_SCORING_CALLS_PER_RUN, MAX_TAILORING_CALLS_PER_RUN } from '../../src/domain/quota';
 import type { FetchResult, JobSource, RawPosting } from '../../src/sources/types';
 
 const USER = 'local-user';
@@ -232,5 +232,89 @@ describe('runPipeline', () => {
     expect(capped).toHaveLength(2);
     expect(capped[0]!.outcome_detail).toMatch(/call cap/i);
     expect(capped[0]!.score).toBeNull();
+  });
+
+  // Regression test for the finding that isDegraded only counted postings
+  // that failed the screening gate, so a run where every scoring call
+  // rejected (an AI outage, not a data quality problem) still reported
+  // 'succeeded' with an empty dashboard. That is the same silent-failure
+  // shape the screening gate exists to prevent, just downstream of it.
+  it('marks the run degraded, not succeeded, when every scoring call rejects', async () => {
+    const alwaysThrows: AiRunner = {
+      run: vi.fn(async () => {
+        throw new Error('Workers AI: capacity temporarily exceeded');
+      }),
+    };
+    const source = fakeSource({
+      postings: [
+        posting(1, REAL_DESCRIPTION),
+        posting(2, REAL_DESCRIPTION),
+        posting(3, REAL_DESCRIPTION),
+      ],
+      unparseable: 0,
+    });
+
+    await runPipeline(await deps(source, alwaysThrows), {
+      userId: USER,
+      trigger: 'manual',
+      runId,
+    });
+
+    const receipt = await repo.getRunReceipt(env.DB, runId);
+    // scored = passed + rejected + scoreFailed (see repo.ts getRunReceipt,
+    // and the existing "builds a receipt that distinguishes every outcome"
+    // test), so a run where every posting ends score_failed still reports
+    // scored: 3, not 0. Zero would mean the postings never reached scoring.
+    expect(receipt).toMatchObject({ scoreFailed: 3, scored: 3, passed: 0 });
+    expect((await repo.getRun(env.DB, runId))!.status).toBe('degraded');
+  });
+
+  it('says so on a match refused by the tailoring cap', async () => {
+    await repo.savePrefs(env.DB, USER, { max_jobs_per_run: 6 });
+    const count = MAX_TAILORING_CALLS_PER_RUN + 2;
+    const postings = Array.from({ length: count }, (_, i) => posting(i + 1, REAL_DESCRIPTION));
+    const { ai } = aiStub(Array(count).fill(90));
+
+    await runPipeline(await deps(fakeSource({ postings, unparseable: 0 }), ai), {
+      userId: USER,
+      trigger: 'manual',
+      runId,
+    });
+
+    const passed = await repo.listMatches(env.DB, USER, { outcome: 'passed', limit: 20 });
+    expect(passed).toHaveLength(count);
+
+    const capped = passed.filter((m) => m.outcome_detail && /tailoring call cap/i.test(m.outcome_detail));
+    expect(capped).toHaveLength(count - MAX_TAILORING_CALLS_PER_RUN);
+    for (const match of capped) {
+      expect(match.score).not.toBeNull();
+      expect(match.reason).not.toBeNull();
+    }
+  });
+
+  it('says so on a match whose tailoring call fails', async () => {
+    const failTailor = vi.fn(async (_model: string, input: Record<string, unknown>) => {
+      const isScoring = input.response_format !== undefined;
+      if (isScoring) {
+        return {
+          response: {
+            score: 90,
+            reason: 'Overlap on Go and Kubernetes.',
+            evidence: [{ jdQuote: 'services in Go', resumeQuote: 'services in Go' }],
+          },
+          usage: { prompt_tokens: 2000, completion_tokens: 100 },
+        };
+      }
+      throw new Error('Workers AI: writer capacity exceeded');
+    });
+    const ai = { run: failTailor } as unknown as AiRunner;
+
+    const source = fakeSource({ postings: [posting(1, REAL_DESCRIPTION)], unparseable: 0 });
+
+    await runPipeline(await deps(source, ai), { userId: USER, trigger: 'manual', runId });
+
+    const passed = await repo.listMatches(env.DB, USER, { outcome: 'passed' });
+    expect(passed[0]!.outcome_detail).toMatch(/writer failed/i);
+    expect(passed[0]!.score).toBe(90);
   });
 });

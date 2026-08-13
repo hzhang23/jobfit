@@ -186,6 +186,32 @@ describe('repo', () => {
     expect(await repo.dueUsers(env.DB, 9)).toEqual([]);
   });
 
+  it('records outcome detail on a match without touching its other columns', async () => {
+    const [job] = await repo.insertNewJobs(env.DB, USER, 'jobicy', [posting(1)]);
+    const matchId = await repo.insertMatch(env.DB, {
+      userId: USER,
+      runId,
+      jobId: job!.id,
+      outcome: 'passed',
+      outcomeDetail: null,
+      score: 90,
+      reason: 'good',
+      evidence: [],
+    });
+
+    await repo.setOutcomeDetail(
+      env.DB,
+      matchId,
+      'No tailored resume. The writer failed after retries: boom',
+    );
+
+    const match = await repo.getMatch(env.DB, matchId);
+    expect(match!.outcome_detail).toBe(
+      'No tailored resume. The writer failed after retries: boom',
+    );
+    expect(match).toMatchObject({ outcome: 'passed', score: 90, reason: 'good', app_status: 'new' });
+  });
+
   it('updates application status and calibration feedback', async () => {
     const [job] = await repo.insertNewJobs(env.DB, USER, 'jobicy', [posting(1)]);
     const matchId = await repo.insertMatch(env.DB, {

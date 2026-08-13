@@ -6,7 +6,11 @@ import { scoreJob } from '../ai/score';
 import { tailorResume } from '../ai/tailor';
 import * as repo from '../db/repo';
 import { passesGate } from '../domain/gate';
-import { MAX_SCORING_CALLS_PER_RUN, callAllowed } from '../domain/quota';
+import {
+  MAX_SCORING_CALLS_PER_RUN,
+  MAX_TAILORING_CALLS_PER_RUN,
+  callAllowed,
+} from '../domain/quota';
 import { verifyProvenance } from '../domain/provenance';
 import { isDegraded, screenPosting } from '../domain/screen';
 import type { Env } from '../env';
@@ -118,6 +122,10 @@ export async function runPipeline(deps: PipelineDeps, params: JobRunParams): Pro
     // month of quota in a single execution.
     let scoringCalls = 0;
     let tailoringCalls = 0;
+    // Counted because the degraded verdict depends on it. A posting that was
+    // never readable and a posting the model could not score are different
+    // causes with the same consequence: no judgment exists for it.
+    let scoreFailed = 0;
 
     for (const jobId of screened.passIds) {
       if (!callAllowed('scoring', scoringCalls)) {
@@ -136,6 +144,7 @@ export async function runPipeline(deps: PipelineDeps, params: JobRunParams): Pro
             evidence: null,
           });
         });
+        scoreFailed += 1;
         continue;
       }
 
@@ -192,13 +201,25 @@ export async function runPipeline(deps: PipelineDeps, params: JobRunParams): Pro
             evidence: null,
           });
         });
+        scoreFailed += 1;
       }
     }
 
     for (const matchId of passedMatchIds) {
       // The match keeps its score, its reason, and its evidence. It just has
-      // no tailored resume, which the detail page already knows how to say.
-      if (!callAllowed('tailoring', tailoringCalls)) continue;
+      // no tailored resume. Say so on the match rather than leaving an
+      // unexplained gap, because "no resume here" and "no resume here for a
+      // reason" read identically to a user and only one of them is honest.
+      if (!callAllowed('tailoring', tailoringCalls)) {
+        await step(`tailor-capped-${matchId}`, async () => {
+          await repo.setOutcomeDetail(
+            db,
+            matchId,
+            `No tailored resume. The per-run tailoring call cap of ${MAX_TAILORING_CALLS_PER_RUN} was reached before this match.`,
+          );
+        });
+        continue;
+      }
 
       try {
         await step(`tailor-${matchId}`, async () => {
@@ -235,14 +256,24 @@ export async function runPipeline(deps: PipelineDeps, params: JobRunParams): Pro
           });
         });
         tailoringCalls += 1;
-      } catch {
-        // The match keeps its score and reason. The detail page reports that
-        // no tailored resume exists, which is better than losing the match.
+      } catch (error) {
+        // The match keeps its score and reason, and records why it has no
+        // resume. Swallowing this silently is the same defect as an empty
+        // dashboard with no receipt.
+        await repo.setOutcomeDetail(
+          db,
+          matchId,
+          `No tailored resume. The writer failed after retries: ${String(error).slice(0, 300)}`,
+        );
       }
     }
 
     await step('finalize', async () => {
-      const degraded = isDegraded(screened.total, screened.insufficient);
+      // Both causes count. A run where every description was empty and a run
+      // where every scoring call failed are equally untrustworthy, and a run
+      // that reports "succeeded" after producing no judgment at all is exactly
+      // the silence this project exists to remove.
+      const degraded = isDegraded(screened.total, screened.insufficient + scoreFailed);
       await repo.finishRun(db, runId, degraded ? 'degraded' : 'succeeded', null);
     });
   } catch (error) {

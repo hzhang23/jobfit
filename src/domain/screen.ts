@@ -100,7 +100,7 @@ export function screenPosting(p: {
  * conditions, where 35 of 35 descriptions came back empty, this fires on the
  * very first run instead of being inferred later from suspicious scores.
  */
-export function isDegraded(total: number, insufficient: number): boolean {
+export function isDegraded(total: number, unusable: number): boolean {
   if (total <= 0) return false;
-  return insufficient / total > DEGRADED_RATIO;
+  return unusable / total > DEGRADED_RATIO;
 }

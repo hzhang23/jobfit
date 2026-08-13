@@ -477,6 +477,28 @@ export async function recordUsage(
     .run();
 }
 
+/**
+ * Records what happened to a match after its score was already stored. The one
+ * current caller is the tailoring step, which can fail or be refused by the
+ * per-run call cap well after the score is durable.
+ *
+ * A passed match leaves outcome_detail null, so the column is free for this. A
+ * match with no tailored resume and no note is indistinguishable from one that
+ * was never attempted, and a user reading that page cannot tell the difference
+ * between "the writer failed" and "nothing happened here". That is failure
+ * mode 3, silence read as a signal.
+ */
+export async function setOutcomeDetail(
+  db: D1Database,
+  matchId: string,
+  detail: string,
+): Promise<void> {
+  await db
+    .prepare('UPDATE matches SET outcome_detail = ? WHERE id = ?')
+    .bind(detail.slice(0, 500), matchId)
+    .run();
+}
+
 export interface RunUsage {
   calls: number;
   tokensIn: number;
