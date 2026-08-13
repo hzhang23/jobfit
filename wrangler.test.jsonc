@@ -1,0 +1,81 @@
+// Test-only Worker config. Keep in sync with wrangler.jsonc.
+//
+// It exists for exactly one reason: wrangler passes the Workers AI binding to
+// the local runtime as an external proxied worker, and the test runtime cannot
+// resolve that proxy. Declaring "ai" here aborts the runtime before a single
+// test runs, with:
+//
+//   wrapped binding module can't be resolved (internal modules only);
+//   moduleName = miniflare-internal:wrapped:__WRANGLER_EXTERNAL_AI_WORKER
+//
+// Omitting it is not a workaround for a version gap. A proxied AI binding
+// reaches the real Workers AI service over the network and needs account
+// credentials, so a test suite that declared it would need a Cloudflare login
+// to start. The tests inject an AiRunner fake instead, which is why nothing
+// here ever touches the binding.
+//
+// A second, unrelated field is also deliberately missing: "workflows". See the
+// comment above "triggers" below for why.
+//
+// Every other field must match wrangler.jsonc. If a binding is added there and
+// forgotten here, the tests fail loudly with a missing binding, which is the
+// direction of drift that self-detects.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jobfit",
+  "main": "src/index.ts",
+  // Pinned to what the test runtime actually honours. vitest-pool-workers 0.5.x
+  // bundles miniflare 3.20241230.0, which caps here and silently falls back,
+  // so a later date would mean tests and production run different runtimes.
+  // Nothing in this project needs 2025 semantics. Verified by probe: both
+  // WorkflowEntrypoint and NonRetryableError resolve at this date. Raise it
+  // together with the test toolchain, not ahead of it.
+  "compatibility_date": "2024-12-30",
+  "compatibility_flags": ["nodejs_compat"],
+  // "workflows" is deliberately absent here, unlike in wrangler.jsonc. A
+  // workflows binding whose class lives in the same script, under the test
+  // runtime, cannot boot: vitest-pool-workers renames the worker under test
+  // to "vitest-pool-workers-runner-<hash>" internally, but only rewrites that
+  // rename into service-binding and Durable Object self-references, not into
+  // a workflows binding's generated service target. The binding then points
+  // at a service with no "JobRunWorkflow" export, and the runtime aborts
+  // before a single test runs with:
+  //
+  //   Worker "workflows:job-run"'s binding "USER_WORKFLOW" refers to service
+  //   "core:user:vitest-pool-workers-runner-..." with a named entrypoint
+  //   "JobRunWorkflow", but that service has no such named entrypoint.
+  //
+  // This is a confirmed upstream bug, not a mistake in this config:
+  // https://github.com/cloudflare/workers-sdk/issues/7414. It was fixed in
+  // @cloudflare/vitest-pool-workers via PR #10494, but that fix targets
+  // Wrangler v4 and was explicitly not backported to the v3 line this project
+  // pins, so adopting it means a wrangler major-version upgrade, a separate
+  // decision from this task.
+  //
+  // Nothing here loses coverage. Every test that triggers a run replaces
+  // JOB_RUN with a fake Workflow on the env passed to app.fetch (see
+  // test/api/routes.test.ts), so the real binding is never exercised. This is
+  // one of three fields, alongside "ai" and "assets", where the two configs
+  // are allowed to differ, and each is allowed for a reason of its own.
+  "triggers": { "crons": ["0 * * * *"] },
+  // "assets" is deliberately absent here too, unlike in wrangler.jsonc. Its
+  // directory is "./web/dist", which is a gitignored build artifact: it only
+  // exists once someone has run "npm run build:web". A test config that named
+  // it would abort the runtime on any clone that has not run the frontend
+  // build yet, before a single test runs. test/api/index.test.ts already
+  // covers the no-assets path deliberately, and Env.ASSETS is optional on the
+  // Env type precisely so this is a supported runtime state, not a crash.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "jobfit",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "SCORING_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "TAILORING_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+  },
+  "observability": { "enabled": true }
+}

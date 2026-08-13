@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers"],
+    "noEmit": true
+  },
+  "include": ["src", "test", "web/src", "vitest.config.ts"]
+}

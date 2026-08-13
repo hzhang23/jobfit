@@ -48,7 +48,7 @@ Requirements 4 and 5 state output contracts, not quality goals. A score without 
 3. Dashboard read p95 under 500 ms.
 4. A full run over 10 postings completes in under 4 minutes, asynchronously, with no user waiting.
 5. **Runs are resumable.** A failure on posting 7 must not discard the work done on postings 1 through 6.
-6. Cost per run under $0.15.
+6. **The app holds no model provider secret, and does not compute what a run costs.** Spend is the provider's to meter and refuse. What is enforced locally is a bound on how many model calls one run may make.
 7. Availability is explicitly not a goal. This is a personal tool. A failed run that retries tomorrow is acceptable.
 
 ### 1.4 Capacity estimate
@@ -160,7 +160,7 @@ The assignment's first example of a product layer response is "a validator that 
 +----------------------------------------------------------+
           |                        |
       +---+---+              +-----+-----+
-      |  D1   |              |  OpenAI   |
+      |  D1   |              | Workers AI|
       +-------+              |  Jobicy   |
                              +-----------+
 ```
@@ -197,7 +197,7 @@ step  finalize           write the run receipt and roll up cost
 
 **One step per posting, not one step for all ten.**
 
-This is how non-functional requirement 5 is satisfied. If OpenAI times out on posting 7, Workflows retries posting 7 alone, because the results for 1 through 6 are already durable. Batching all ten into one step would replay all ten calls on retry, paying twice and risking a different failure on the second pass. The n8n version had node level retry, which is coarser: the unit was the node, not the item.
+This is how non-functional requirement 5 is satisfied. If the model call times out on posting 7, Workflows retries posting 7 alone, because the results for 1 through 6 are already durable. Batching all ten into one step would replay all ten calls on retry, paying twice and risking a different failure on the second pass. The n8n version had node level retry, which is coarser: the unit was the node, not the item.
 
 **Steps pass ids and counts, never payloads.**
 
@@ -296,15 +296,23 @@ When `passed = 0`, it must say which kind of zero:
 
 "Nothing qualified" and "the fetch failed" must look different on screen. This works only because `matches` keeps a row for every posting, which makes the receipt a single `GROUP BY outcome`.
 
-### 5.4 Cost control
+### 5.4 Bounding the work, not pricing it
 
-**Model split.** A cheap model performs the 10 scoring calls. An expensive model runs only for the 2 to 4 postings that clear the gate.
+An earlier version of this design kept a local price table and estimated the dollar cost of every call, so a running total could be compared against a monthly ceiling. That was removed, for a reason this document has already argued once in a different context.
 
-**The threshold is a cost device as much as a quality device.** It removes roughly 60% of expensive calls.
+A local price table is a copy of someone else's billing. It goes stale without announcing it, and the number it produces is an estimate. Comparing an estimate against a ceiling and then acting on the result is exactly the pattern in failure mode 2: a confident judgment computed from an input that was never good enough to support it. The system that exists to refuse manufactured confidence should not manufacture its own.
 
-Descriptions are truncated to 6000 characters before scoring. Past that point additional context does not improve a fit judgment but does increase cost linearly.
+**So spend moved to the provider.** The app runs on Cloudflare Workers AI through the `AI` binding. Cloudflare knows the real number, meters it, and refuses the call when the account is over quota. That refusal is a fact rather than an estimate, and the pipeline treats it as a first class run outcome: postings that were not scored are recorded as unscored, and the receipt says the run stopped on quota rather than on findings. This also means **the app holds no model provider secret at all**, which is why the repository can be public with nothing to strip before pushing.
 
-`usage_ledger` records real token counts. `/api/runs/:id` reports real spend against the $0.15 target. If rolling 30 day spend exceeds a configured ceiling, scheduled runs are skipped and the dashboard says so. Manual runs remain available.
+What stays local is a bound on blast radius, not on money:
+
+- **A per-run call cap.** `MAX_SCORING_CALLS_PER_RUN = 10` and `MAX_TAILORING_CALLS_PER_RUN = 4`, enforced by `callAllowed` before each call. A count is exact and needs no external fact to stay true, so a bug that loops cannot spend a month of quota in one run.
+- **The score threshold is still a work reducer.** It keeps roughly 60% of postings from ever reaching the tailoring call.
+- **Descriptions are truncated to 6000 characters before scoring.** Past that point additional context does not improve a fit judgment.
+
+`usage_ledger` still records `tokens_in` and `tokens_out` per call, because the run receipt should be able to say what was called. It no longer carries `cost_usd`, because that column held a guess.
+
+**The tradeoff, stated plainly.** The provider tells you after you have spent, not before. There is no pre-flight "this run will cost X, stop." The call cap is what replaces that, and it is a coarser instrument: it bounds the number of calls, not their size. For a personal tool making at most 14 calls a day, that bound is sufficient, and it has the advantage of being exactly true rather than approximately true.
 
 ### 5.5 The calibration loop
 
@@ -337,11 +345,12 @@ Postings are hidden by filter rather than dropped at ingest. If the staleness ru
 | Jobicy unreachable or 5xx | Step retries 3 times with exponential backoff. On exhaustion the run is marked `failed` with the error text. The dashboard shows the failed receipt, never a blank page |
 | Jobicy returns a changed shape | Response is parsed against a schema at the adapter boundary. Unparseable postings are counted and reported, not silently skipped |
 | Descriptions come back empty | Not an error. Handled by `screen-inputs` and the degraded banner. This is the Module 3 failure, converted from an invisible event into a first class outcome |
-| OpenAI rate limit or timeout on scoring | Per posting step retry. On exhaustion that posting alone becomes `score_failed` and appears on the receipt. The run continues |
-| Model returns malformed JSON | Structured output schema is validated. Invalid response is a step failure, so it retries. On exhaustion, `score_failed` |
+| Workers AI rate limit, quota exhaustion, or timeout on scoring | Per posting step retry. On exhaustion that posting alone becomes `score_failed` and appears on the receipt. The run continues |
+| Model returns malformed JSON | Structured output schema is validated. Workers AI also returns an explicit `JSON Mode couldn't be met` error when it cannot satisfy the schema. Either way it is a step failure, so it retries. On exhaustion, `score_failed` |
 | Tailoring fails for one match | That match keeps its score and reason but has no resume. The detail page says so |
 | No active master resume | `load-inputs` fails fast before any external call is made or any money is spent |
-| Cost ceiling exceeded | Scheduled runs skip with a recorded reason. Manual runs still allowed |
+| Account AI quota exhausted | Cloudflare refuses the call. Postings not yet scored become `score_failed` with the refusal text, and the receipt says the run stopped on quota rather than on findings |
+| A run tries to make more model calls than its cap | `callAllowed` refuses locally before the call. Remaining postings are recorded as unscored on the receipt |
 
 The pattern throughout: **a failure produces a visible row, not an absence.**
 
@@ -356,9 +365,9 @@ Vitest with `@cloudflare/vitest-pool-workers`, which gives a real D1 through Min
 - `screenInputs`: boundary cases at 399 and 400 characters, HTML only bodies, placeholder phrases, missing title, unicode token counting
 - `verifyProvenance`: invented numbers, invented dates, invented employers, synonym handling, and an explicit test documenting the known false negative on semantic drift
 - `gate`: threshold boundaries, NULL score handling
-- `estimateCost`: token accounting against known model prices
+- `quota`: per-run call caps, including the prototype-key regression case
 
-**Integration tests** run the whole Workflow with the Jobicy fetch and the OpenAI call stubbed, asserting the resulting receipt counts and `matches` rows.
+**Integration tests** run the whole Workflow with the Jobicy fetch and the AI runner stubbed, asserting the resulting receipt counts and `matches` rows.
 
 **Regression fixtures.** Captured real Jobicy payloads, plus one degenerate payload modeled on the Module 3 LinkedIn failure where every description is null. **That incident becomes a permanent test case.** The assertion is that the run completes, produces zero scores, and is marked `degraded`.
 
@@ -376,7 +385,7 @@ Vitest with `@cloudflare/vitest-pool-workers`, which gives a real D1 through Min
 | API | Hono |
 | Frontend | React with Vite, served through Workers Assets |
 | Scheduling | Cloudflare Cron Triggers, hourly |
-| AI | OpenAI with structured outputs, two models split by role |
+| AI | Cloudflare Workers AI through the `AI` binding, JSON mode for structured output, `@cf/meta/llama-3.3-70b-instruct-fp8-fast` for both roles |
 | Job source | Jobicy public API, behind a `JobSource` interface |
 | Tests | Vitest with `@cloudflare/vitest-pool-workers` |
 
