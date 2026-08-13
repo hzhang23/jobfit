@@ -13,6 +13,7 @@ function receipt(overrides: Partial<Receipt>): Receipt {
     passed: 0,
     rejected: 0,
     scoreFailed: 0,
+    notAttempted: 0,
     topRejectedScore: null,
     ...overrides,
   };
@@ -173,5 +174,53 @@ describe('RunReceipt reports work, never money', () => {
     expect(html).not.toMatch(/\$\s*\d/);
     expect(html.toLowerCase()).not.toContain('spend');
     expect(html.toLowerCase()).not.toContain('cost');
+  });
+});
+
+describe('RunReceipt separates deferred postings from failed ones', () => {
+  // Regression test for the finding that mattered most in the final review.
+  // Cap-refused postings used to be recorded as score_failed and counted as
+  // untrustworthy, so raising postings per run above about 20 made every
+  // healthy run report "not trustworthy" forever. A warning that always fires
+  // is a warning nobody reads, and this project's entire subject is a warning
+  // worth reading.
+  it('a run that hit its own call cap is not described as untrustworthy', () => {
+    const t = text(
+      render(
+        run(
+          'succeeded',
+          receipt({ fetched: 25, alreadySeen: 0, scored: 10, passed: 10, notAttempted: 15 }),
+        ),
+      ),
+    );
+
+    expect(t).not.toContain('not trustworthy');
+    expect(t).not.toContain('produced no judgment');
+    expect(t).not.toContain('could not be scored');
+    expect(t).toContain('15 not attempted');
+  });
+
+  it('explains a zero-pass day caused only by the call cap, and says it is recoverable', () => {
+    const t = text(
+      render(run('succeeded', receipt({ fetched: 20, scored: 0, passed: 0, notAttempted: 20 }))),
+    );
+
+    expect(t).toContain("call cap was already spent");
+    expect(t).toContain('They are not lost');
+    expect(t).not.toContain('not a quiet day');
+  });
+
+  it('still says untrustworthy when the cause is a real failure, not the cap', () => {
+    const t = text(
+      render(
+        run(
+          'degraded',
+          receipt({ fetched: 12, scored: 2, passed: 1, rejected: 1, scoreFailed: 10 }),
+        ),
+      ),
+    );
+
+    expect(t).toContain('not trustworthy');
+    expect(t).toContain('10 could not be scored');
   });
 });

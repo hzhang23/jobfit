@@ -16,6 +16,7 @@ export interface Receipt {
   passed: number;
   rejected: number;
   scoreFailed: number;
+  notAttempted: number;
   topRejectedScore: number | null;
 }
 
@@ -31,7 +32,7 @@ export interface Run {
 
 export interface Match {
   id: string;
-  outcome: 'insufficient_input' | 'rejected' | 'passed' | 'score_failed';
+  outcome: 'insufficient_input' | 'rejected' | 'passed' | 'score_failed' | 'not_attempted';
   outcome_detail: string | null;
   score: number | null;
   reason: string | null;

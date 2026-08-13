@@ -1,4 +1,6 @@
 export type MatchOutcome =
+  /** Never sent to the model, because the per-run call cap was already spent. */
+  | 'not_attempted'
   | 'insufficient_input'
   | 'rejected'
   | 'passed'

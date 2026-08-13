@@ -264,10 +264,12 @@ describe('runPipeline', () => {
 
     expect(aiRun).toHaveBeenCalledTimes(MAX_SCORING_CALLS_PER_RUN);
 
-    const capped = await repo.listMatches(env.DB, USER, { outcome: 'score_failed' });
+    const capped = await repo.listMatches(env.DB, USER, { outcome: 'not_attempted' });
     expect(capped).toHaveLength(2);
     expect(capped[0]!.outcome_detail).toMatch(/call cap/i);
     expect(capped[0]!.score).toBeNull();
+    // Deferred, not failed. Nothing here is evidence that anything is wrong.
+    expect(await repo.listMatches(env.DB, USER, { outcome: 'score_failed' })).toHaveLength(0);
   });
 
   // Regression test for the finding that isDegraded only counted postings
@@ -352,5 +354,76 @@ describe('runPipeline', () => {
     const passed = await repo.listMatches(env.DB, USER, { outcome: 'passed' });
     expect(passed[0]!.outcome_detail).toMatch(/writer failed/i);
     expect(passed[0]!.score).toBe(90);
+  });
+
+  // Regression test for the final review's sharpest finding. Cap-refused
+  // postings used to be written as score_failed and counted as untrustworthy,
+  // so raising postings per run above about 20 made every healthy run report
+  // "degraded" forever. The app's own quota was driving its own trust verdict.
+  it('stays succeeded when the only unscored postings are ones the cap deferred', async () => {
+    await repo.savePrefs(env.DB, USER, { max_jobs_per_run: 25 });
+    const postings = Array.from({ length: 25 }, (_, i) => posting(i + 1, REAL_DESCRIPTION));
+    const { ai } = aiStub(Array(25).fill(90));
+
+    await runPipeline(await deps(fakeSource({ postings, unparseable: 0 }), ai), {
+      userId: USER,
+      trigger: 'manual',
+      runId,
+    });
+
+    const receipt = await repo.getRunReceipt(env.DB, runId);
+    expect(receipt).toMatchObject({ scored: 10, notAttempted: 15, scoreFailed: 0 });
+    expect((await repo.getRun(env.DB, runId))!.status).toBe('succeeded');
+  });
+
+  // Regression test. The counters incremented only after a step resolved, so a
+  // failing call was free and the cap bounded nothing during exactly the
+  // outage it exists to contain.
+  it('counts a failed call against the cap, so an outage cannot exceed it', async () => {
+    await repo.savePrefs(env.DB, USER, { max_jobs_per_run: 15 });
+    const postings = Array.from({ length: 15 }, (_, i) => posting(i + 1, REAL_DESCRIPTION));
+    const aiRun = vi.fn(async () => {
+      throw new Error('Workers AI: capacity temporarily exceeded');
+    });
+    const ai = { run: aiRun } as unknown as AiRunner;
+
+    await runPipeline(await deps(fakeSource({ postings, unparseable: 0 }), ai), {
+      userId: USER,
+      trigger: 'manual',
+      runId,
+    });
+
+    expect(aiRun).toHaveBeenCalledTimes(MAX_SCORING_CALLS_PER_RUN);
+    expect((await repo.getRunReceipt(env.DB, runId)).scoreFailed).toBe(
+      MAX_SCORING_CALLS_PER_RUN,
+    );
+  });
+
+  // Regression test. A Workflow step is at-least-once. A score step that
+  // committed its match row and then died left a row behind, and the retry hit
+  // the unique index on job_id. The error escaped its own step and the outer
+  // catch marked the entire run failed, discarding work that had succeeded.
+  it('survives a retried step that already wrote its match row', async () => {
+    const source = fakeSource({ postings: [posting(1, REAL_DESCRIPTION)], unparseable: 0 });
+    const { ai } = aiStub([90]);
+
+    // Retries only the scoring step, which is the real scenario: the step
+    // committed its match row and then died before Workflows recorded it as
+    // done. Retrying every step instead would re-run the fetch, which finds no
+    // new jobs the second time and would test nothing.
+    const retryScore: StepRunner = async (name, fn) => {
+      if (name.startsWith('score-')) {
+        await fn();
+      }
+      return fn();
+    };
+
+    const d = await deps(source, ai);
+    await runPipeline({ ...d, step: retryScore }, { userId: USER, trigger: 'manual', runId });
+
+    const run = await repo.getRun(env.DB, runId);
+    expect(run!.status).not.toBe('failed');
+    expect(run!.error).toBeNull();
+    expect(await repo.listMatches(env.DB, USER, { outcome: 'passed' })).toHaveLength(1);
   });
 });

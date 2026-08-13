@@ -73,6 +73,10 @@ export function MatchDetailView({
         <p>
           <strong>Not evaluated.</strong> {match.outcome_detail}
         </p>
+      ) : match.outcome === 'not_attempted' ? (
+        <p>
+          <strong>Not attempted.</strong> {match.outcome_detail}
+        </p>
       ) : match.outcome === 'score_failed' ? (
         <p>
           <strong>No score.</strong> This posting reached the scorer and came back without a

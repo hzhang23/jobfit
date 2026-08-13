@@ -130,6 +130,14 @@ export async function runPipeline(deps: PipelineDeps, params: JobRunParams): Pro
     // never readable and a posting the model could not score are different
     // causes with the same consequence: no judgment exists for it.
     let scoreFailed = 0;
+    // Kept apart from scoreFailed on purpose. A posting the model could not
+    // score is evidence that something is wrong. A posting we declined to send
+    // because our own cap was spent is evidence of nothing except our own
+    // settings. Counting the second as untrustworthy made a perfectly healthy
+    // run with max_jobs_per_run above 20 report "not trustworthy" on every
+    // single run, forever, which teaches the user to ignore the banner. A
+    // warning that always fires is a warning nobody reads.
+    let notAttempted = 0;
 
     for (const jobId of screened.passIds) {
       if (!callAllowed('scoring', scoringCalls)) {
@@ -141,16 +149,23 @@ export async function runPipeline(deps: PipelineDeps, params: JobRunParams): Pro
             userId,
             runId,
             jobId,
-            outcome: 'score_failed',
-            outcomeDetail: `Per-run scoring call cap of ${MAX_SCORING_CALLS_PER_RUN} was reached before this posting`,
+            outcome: 'not_attempted',
+            outcomeDetail: `Not sent to the scorer. The per-run call cap of ${MAX_SCORING_CALLS_PER_RUN} was already spent.`,
             score: null,
             reason: null,
             evidence: null,
           });
         });
-        scoreFailed += 1;
+        notAttempted += 1;
         continue;
       }
+
+      // Counted before the call, not after. Incrementing on success meant a
+      // failing call was free, so during a provider outage the cap bounded
+      // nothing at all. Workflows retries each step three times on top of
+      // that, so the promise of "10 calls" became roughly 40. A cap that
+      // stops counting exactly when things go wrong is not a cap.
+      scoringCalls += 1;
 
       try {
         const scored = await step(`score-${jobId}`, async () => {
@@ -188,7 +203,6 @@ export async function runPipeline(deps: PipelineDeps, params: JobRunParams): Pro
           return { matchId, passed };
         });
 
-        scoringCalls += 1;
         if (scored.passed) passedMatchIds.push(scored.matchId);
       } catch (error) {
         // Retries are exhausted. This posting alone is marked, and the run
@@ -225,6 +239,8 @@ export async function runPipeline(deps: PipelineDeps, params: JobRunParams): Pro
         continue;
       }
 
+      tailoringCalls += 1;
+
       try {
         await step(`tailor-${matchId}`, async () => {
           const match = await repo.getMatch(db, matchId);
@@ -259,7 +275,6 @@ export async function runPipeline(deps: PipelineDeps, params: JobRunParams): Pro
             tokensOut: result.usage.tokensOut,
           });
         });
-        tailoringCalls += 1;
       } catch (error) {
         // The match keeps its score and reason, and records why it has no
         // resume. Swallowing this silently is the same defect as an empty
@@ -290,7 +305,10 @@ export async function runPipeline(deps: PipelineDeps, params: JobRunParams): Pro
       // Already-seen postings are not in either figure. They were judged in an
       // earlier run, so this run owes no verdict on them. Unparseable rows are
       // in both, because they were candidates for judgment and produced none.
-      const judgeable = screened.total + fetched.unparseable;
+      // Postings we never sent are in neither figure. They are deferred by our
+      // own cap, not evidence about the source or the model, and putting them
+      // in either side would let a settings change manufacture a trust verdict.
+      const judgeable = screened.total + fetched.unparseable - notAttempted;
       const unjudged = screened.insufficient + scoreFailed + fetched.unparseable;
       const degraded = isDegraded(judgeable, unjudged);
       await repo.finishRun(db, runId, degraded ? 'degraded' : 'succeeded', null);

@@ -42,6 +42,7 @@ export function RunReceipt({ run }: { run: Run }) {
           {r.unparseable > 0 ? `, ${r.unparseable} unreadable` : ''}, {r.alreadySeen} already
           seen, {r.insufficient} no description, {r.scored} scored, {r.passed} passed
           {r.scoreFailed > 0 ? `, ${r.scoreFailed} could not be scored` : ''}
+          {r.notAttempted > 0 ? `, ${r.notAttempted} not attempted` : ''}
         </code>
       </p>
 
@@ -56,6 +57,11 @@ export function RunReceipt({ run }: { run: Run }) {
             <>
               {r.scoreFailed} postings reached the scorer and none of them came back with a
               score. This is a scoring failure, not a quiet day.
+            </>
+          ) : r.notAttempted > 0 && r.scoreFailed === 0 && r.insufficient === 0 ? (
+            <>
+              {r.notAttempted} postings were not sent to the scorer, because this run's call
+              cap was already spent. They are not lost. Lower postings per run, or run again.
             </>
           ) : r.fetched === 0 && r.unparseable > 0 ? (
             <>

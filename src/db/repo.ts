@@ -83,6 +83,8 @@ export interface Receipt {
   passed: number;
   rejected: number;
   scoreFailed: number;
+  /** Postings never sent to the model because the per-run cap was spent. */
+  notAttempted: number;
   /** Highest score among rejected postings. Lets the UI explain a zero-pass day. */
   topRejectedScore: number | null;
 }
@@ -315,6 +317,7 @@ export async function getRunReceipt(db: D1Database, runId: string): Promise<Rece
     passed: count('passed'),
     rejected: count('rejected'),
     scoreFailed: count('score_failed'),
+    notAttempted: count('not_attempted'),
     topRejectedScore: by('rejected')?.top ?? null,
   };
 }
@@ -335,10 +338,20 @@ export async function insertMatch(
   },
 ): Promise<string> {
   const id = newId('mch');
-  await db
+  // ON CONFLICT, because a Workflow step is at-least-once, not exactly-once.
+  // A score step can commit its match row and then die before Workflows
+  // records the step as done, and the retry then hits idx_match_job. Without
+  // this the retry throws, the catch tries to insert a score_failed row for
+  // the same job and throws again, that error escapes its own step, and the
+  // outer catch marks the whole run failed. A run that scored ten postings
+  // correctly would report failure with a raw SQLite message, which defeats
+  // the rule that one posting's trouble never discards its siblings.
+  const row = await db
     .prepare(
       `INSERT INTO matches (id, user_id, run_id, job_id, outcome, outcome_detail, score, reason, evidence, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(job_id) DO NOTHING
+       RETURNING id`,
     )
     .bind(
       id,
@@ -352,8 +365,20 @@ export async function insertMatch(
       m.evidence ? JSON.stringify(m.evidence) : null,
       now(),
     )
-    .run();
-  return id;
+    .first<{ id: string }>();
+
+  if (row) return row.id;
+
+  // The row already existed, so a previous attempt of this step succeeded.
+  // Return the id it wrote rather than a new one that points at nothing.
+  const existing = await db
+    .prepare('SELECT id FROM matches WHERE job_id = ?')
+    .bind(m.jobId)
+    .first<{ id: string }>();
+  if (!existing) {
+    throw new Error(`Match for job ${m.jobId} neither inserted nor found`);
+  }
+  return existing.id;
 }
 
 export async function getMatch(db: D1Database, matchId: string): Promise<MatchRow | null> {
